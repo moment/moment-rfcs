@@ -20,7 +20,7 @@ We currently have 4 different apis for dealing with offsets and timezones. This 
 
 To solve this, we could introduce an interface for a `TimeZone` in moment. Moment would provide 2 classes that implement the `TimeZone` interface, `LocalTimeZone` and `FixedOffsetTimeZone`. Moment timezone would provide a `TZDBTimeZone` class that implements the `TimeZone` interface.
 
-Each moment that was created would have a time zone. Calls to `moment()` would have a `LocalTimeZone` instance, calls to `moment.utc()` would have a `FixedOffsetTimeZone` instance, and
+Each moment that is created would have a time zone. Calls to `moment()` would have a `LocalTimeZone` instance, calls to `moment.utc()` would have a `FixedOffsetTimeZone` instance, and
 calls to `moment.tz()` would have a `TZDBTimeZone` instance.
 
 ## TimeZone interface
@@ -65,7 +65,7 @@ FixedOffsetTimeZone.prototype.parse = function (parts, config) {
 };
 
 LocalTimeZone.prototype.parse = function (parts, config) {
-	var parsed = new Date(parts[0], parts[1], parts[2], parts[3], parts[4];
+	var parsed = new Date(parts[0], parts[1], parts[2], parts[3], parts[4]);
 	return -parsed.getTimezoneOffset();
 };
 ```
