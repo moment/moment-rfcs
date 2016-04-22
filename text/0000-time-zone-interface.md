@@ -25,56 +25,141 @@ calls to `moment.tz()` would have a `TZDBTimeZone` instance.
 
 ## TimeZone interface
 
-The TimeZone interface consists of 3 methods.
+The TimeZone interface consists of these methods and properties.
 
-### `TimeZone#offset(timestamp)`
+```js
+TimeZone#abbrFromTimestamp(timestamp)
+TimeZone#abbrFromParts(year, month, day, hour, minute, second, millisecond)
+TimeZone#offsetFromTimestamp(timestamp)
+TimeZone#offsetFromParts(year, month, day, hour, minute, second, millisecond)
+TimeZone#toString()
+TimeZone#type
+```
+
+Only one of `offsetFromTimestamp` or `offsetFromParts` must be implemented. Moment will try `offsetFromTimestamp` first, and if it is not implemented, will use `offsetFromParts`.
+
+Only one of `abbrFromTimestamp` or `abbrFromParts` must be implemented. Moment will try `abbrFromTimestamp` first, and if it is not implemented, will use `abbrFromParts`.
+
+### `TimeZone#offsetFromTimestamp(timestamp)`
 
 This method is responsible for returning the offset at a particular timestamp. The offset should be in minutes, the same as `moment#utcOffset`.
 
-Sample implementations:
+This timestamp is not the number of milliseconds since 1970-01-01T00:00+00:00. Instead, it is the number of milliseconds since 1970-01-01T00:00 in that time zone.
+
+The same calendar date will use the same timestamp regardless of its offset. See below, where changing the offset does not change the timestamp, but changing the date does.
 
 ```
-FixedOffsetTimeZone.prototype.offset = function (timestamp) {
+Date        Offset  Timestamp
+2016-01-01  +00:00  1451606400000
+2016-01-01  +01:00  1451606400000
+2016-01-01  +12:00  1451606400000
+2016-01-02  +12:00  1451692800000
+2016-01-02  +00:00  1451692800000
+```
+
+Sample implementation:
+
+```js
+FixedOffsetTimeZone.prototype.offsetFromTimestamp = function (timestamp) {
 	return this.presetOffset;
 };
-
-LocalTimeZone.prototype.offset = function (timestamp) {
-	return -(new Date(timestamp).getTimezoneOffset());
-};
 ```
 
-The `LocalTimeZone` could use a naive implementation like above, or something more sophisticated like http://stackoverflow.com/a/35883858/634824 to work around browser inconsistencies.
+This only needs to be implemented if `offsetFromParts` is not implemented.
 
-We could use something like [moment-timezone's user offsets](https://github.com/moment/moment-timezone/blob/6f663eb510661939e04036c53edb7851212af757/src/guess/user-offsets.js) method to pre-calculate all the offset changes to make lookups faster.
+### `TimeZone#offsetFromParts(year, month, day, hour, minute, second, millisecond)`
 
-### `TimeZone#parse(parts, options)`
+This method is responsible for returning the offset from a group of date parts.  
 
-This method is responsible for returning the offset from a group of date parts.
+Sample implementation:
 
-`parts` is an array of date parts from year to minute. `[year, month, day, hour, minute]`.
-
-`options` contains flags for `moveAmbiguousForward` and `moveInvalidForward`.
-
-This can be used in parsing, to determine the correct offset to parse a moment into, or to determine which day to default to for issues like https://github.com/moment/moment-timezone/issues/297.
-
-Sample implementations:
-
-```
-FixedOffsetTimeZone.prototype.parse = function (parts, config) {
-	return this.presetOffset;
-};
-
-LocalTimeZone.prototype.parse = function (parts, config) {
-	var parsed = new Date(parts[0], parts[1], parts[2], parts[3], parts[4]);
+```js
+LocalTimeZone.prototype.parse = function (year, month, day, hour, minute, second, millisecond) {
+	var parsed = new Date(year, month, day, hour, minute, second, millisecond);
 	return -parsed.getTimezoneOffset();
 };
 ```
 
-The `LocalTimeZone` implementation can use something similar to [moment-timezone's implementation](https://github.com/moment/moment-timezone/blob/6f663eb510661939e04036c53edb7851212af757/src/zone/zone.js#L29-L52) using the pre-calculated offsets.
+This only needs to be implemented if `offsetFromTimestamp` is not implemented.
 
-### `TimeZone#abbr(timestamp)`
+### `TimeZone#abbrFromTimestamp(timestamp)`
 
-This method is responsible for returning the time zone abbreviation for a particular timestamp _if available_. This will be used for the `z` and `zz` tokens by the formatter.
+This method is responsible for returning the time zone abbreviation for a particular timestamp _if available_. This will be used for the `z` and `zz` tokens by the formatter. This only needs to be implemented if `abbrFromParts` is not implemented.
+
+Like `offsetFromTimestamp`, this timestamp is the number of milliseconds since 1970-01-01T00:00 in that time zone.
+
+### `TimeZone#abbrFromParts(year, month, day, hour, minute, second, millisecond)`
+
+This method is responsible for returning the time zone abbreviation from a group of date parts _if available_. This only needs to be implemented if `abbrFromTimestamp` is not implemented.
+
+### `TimeZone#toString()`
+
+This returns a uniquely identifying string used to reference the time zone. Some examples are `"local"` for local time zones, `"UTC"` or `"UTC+01:00"` for fixed offset time zones, and `"America/Chicago"` or `"America/Los_Angeles"` for tzdb time zones.
+
+### `TimeZone#type`
+
+This is a string representing the type of time zone. It will be one of `local`, `fixed-offset`, `tzdb` (subject to bikeshedding).
+
+## New Moment APIs
+
+In addition to these interfaces, we will need to add some new apis to manage working with time zones.
+
+### `moment.defineTimeZone(callback)`
+
+This allows other parties to register callbacks used to resolve TimeZone objects from a string identifier.
+
+Sample implementation:
+
+```js
+// local
+moment.defineTimezone(function (input) {
+  if (input === 'local') {
+    return new LocalTimeZone();
+  }
+});
+// fixed offset
+moment.defineTimezone(function (input) {
+  if (matchesFixedOffsetFormat(input)) {
+    return new FixedOffsetTimeZone(input);
+  }
+});
+// moment timezone
+moment.defineTimezone(function (input) {
+  if (zones[input]) {
+    return zones[input];
+  }
+});
+```
+
+The timezone resolver would just loop through all the callbacks, returning the first timezone that matched. If there were no matches, a `console.error` would be logged.
+
+### `moment.withTimeZone`
+
+This api allows users or libraries to construct a moment in a specific timezone. It returns a function with the same signature as `moment()` and `moment.utc()`.
+
+Usage:
+
+```js
+var create = moment.withTimeZone('America/Chicago');
+var nowInChicago = create();
+var decemberInChicago = create("2016 décembre", "YYYY MMMM", "fr");
+```
+
+### `moment#timeZone`
+
+This api allows users to get or set the time zone. The value passed in is a string identifier, and the return value is `TimeZone#toString()`.
+
+Usage:
+
+```js
+var instance = moment();
+instance.timeZone('America/Los_Angeles');
+instance.timeZone();  // America/Los_Angeles
+instance.format('Z'); // -07:00
+instance.timeZone('local');
+instance.timeZone();  // local
+instance.format('Z'); // -05:00
+```
 
 # How We Teach This
 
@@ -96,19 +181,27 @@ We add documentation for `moment.tz()` and `moment#tz` to explain that these are
 
 All of the internals of moment will need to be cleaned up to remove calls to methods like `Date#getMonth` and `new Date(year, month, day)`.
 
-## Filesize
-
-This will increase the file size of moment, but would likely allow some refactoring and optimization that would offset the increase.
-
 # Alternatives
 
 To solve https://github.com/moment/moment-timezone/issues/297, we could introduce yet another moment-timezone specific hook for determining what 'today' is for a timezone.
 
+Instead of introducing `moment.withTimeZone`, we could add the timezone to the end of the argument list. `moment(input, format, locale, strict, timeZone)`. This method already has a lot of tricky positional arguments, so it doesn't seem reasonable.
+
+Instead of only using partial application for the time zone with `moment.withTimeZone`, we could expand it to format, locale, and strict parsing.
+
+```js
+var create = moment.withDefaults({
+  zone: "America/Chicago",
+  locale: "fr",
+  format: "YYYY MMMM",
+  strict: true
+});
+var novemberInChicago = create("2016 novembre");
+var decemberInChicago = create("2016 décembre");
+```
+
 # Unresolved questions
 
-Should we bike shed the TimeZone interface method names?
- Could we deprecate public apis created specifically for moment-timezone? `moment.updateOffset` and `moment.momentProperties`.
+Could we remove undocumented public apis created specifically for moment-timezone? `moment.updateOffset` and `moment.momentProperties`.
 
-Could we move `moment.tz.setDefault` into moment core as a `moment.defaultZone` getter/setter?
-
-Could we deprecate `moment#isUTC`, `moment#isUtcOffset` or find a more accurate alternative?
+Could we deprecate `moment#isUTC`, `moment#isLocal`, `moment#isUtcOffset` or find a more accurate alternative?
