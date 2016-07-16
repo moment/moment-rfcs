@@ -1,5 +1,5 @@
 - Start Date: 2016-07-07
-- RFC PR: (leave this empty)
+- RFC PR: [#2][pull request]
 - Moment Issue: [#1754][]
 
 # Summary
@@ -208,9 +208,10 @@ communicate the distinctions between different builds now that we'd (presumably)
 have twice as many different pre-built packages available.
 
 I'm tempted to say we should sidestep all this build + communication complexity
-by building everything from this RFC into the core library, but I'm not 100%
-confident that's the correct tradeoff.  We probably need some community feedback
-(particularly from plugin authors) before locking down the plugin vs core decision.
+by building everything from this RFC into the core library, especially since we
+probably want to steer new users toward the new APIs.  That said, we probably
+need some community feedback (particularly from plugin authors) before locking
+down the plugin vs core decision.
 
 ## Frozen API
 
@@ -232,9 +233,9 @@ namespace without consequence.
 
 Users would also be able to mix and match APIs within the same application,
 allowing existing applications to incrementally migrate from one API to the
-other by using both APIs as appropriate, and then parsing Mutables from
-Frozens (or vice-versa) at the boundaries to the modified code, as
-appropriate.
+other by converting some of their code to use Frozens rather than Mutables,
+and then parsing Mutables from Frozens (or vice-versa) at the boundaries to
+the modified code as necessary.
 
 So, from a user's perspective:
 
@@ -338,20 +339,24 @@ determine which path is best (after writing a rough initial implementation in co
 
 # How We Teach This
 
-We probably need a dedicated page at momentjs.com introducing users to the
-semantic distinctions between the Mutable and Frozen APIs.
+Because our own experience and a preponderance of Moment-related support
+requests suggest that new users would have fewer problems working with the
+Frozen API, we would generally want to push new users to use `moment.frozen`
+exclusively and ignore the traditional Mutable API.
+
+We probably need some dedicated documentation at momentjs.com introducing
+existing users to the semantic distinctions between the Mutable and Frozen
+APIs, reassuring them that the Mutable APIs aren't disappearing but also
+encouraging them to consider adoption of the Frozen APIs if it makes sense
+in their situation.
 
 We also need to describe the `addFactory` and `addMethod` functions for the
 API reference documentation at momentjs.org/docs.
 
 It would feel pretty heavy to just append (largely duplicative) documentation
 for all the `moment.frozen.*` APIs to the existing documentation page.
-If these APIs are part of a plugin then maybe we need a dedicated subsite
-for the plugin (similar to Moment Timezone) with its own copy of the docs
-(although hopefully the docs could be automatically generated for both sites
-from the same source material, since most of the info would be the same).
-If it's all part of core, and/or if we're distributing bundled builds with
-core + plugin in a single file, then maybe there could be a toggle switch
+Since we generally want to steer new users toward the Frozen APIs, then maybe
+we could show just the Frozen APIs by default, with a toggle switch
 to convert between Mutable and Frozen API docs (similar to how some
 Coffeescript libraries let you toggle between .js and .coffee syntax in
 their documentation's code examples).
@@ -388,7 +393,7 @@ their implementations.
    minifiers won't be able to rename those methods, possibly leading to an
    additional slight increase in file sizes for folks who minify their
    dependencies together with their custom code.
-6. The new plugin registation system will slightly increase the time
+6. The new plugin registation system may slightly increase the time
    required for Moment and its plugins to initialize themselves for use.
    I don't expect this to be a noticeable issue, though.
 
@@ -428,20 +433,21 @@ not itself "just" another third-party plugin.
 # Unresolved questions
 
 1. How much of this functionality should be implemented in the core library
-   vs a first-party plugin?  Will we want to offer additional pre-compiled
-   builds for users to download?  If so, which is the default "recommended"
-   build publicized most heavily at momentjs.com, and how do we describe the
-   differences for our alternative builds?
-2. Will we ever want to proactively encourage new users to use the frozen
-   APIs instead of the traditional APIs?  If so, when and why?  If not, how
-   do we make sure that new users approaching our documentation will
-   understand their options without first writing a bunch of code against the
-   wrong API and getting stuck and coming to us for help?
+   vs a first-party plugin?  If it's a plugin, then we should probably still
+   consider distributing builds that have both Frozen Moment and Moment.js
+   in a single file to make it easy for new users to adopt the Frozen APIs.
+   That way the big download button at momentjs.com can get new users set up
+   with our recommended environment.  But then, how would we label the link
+   to download a build of just the core library, without this RFC's plugin?
+2. How quickly and strongly do we want to proactively encourage new users to
+   use the frozen APIs instead of the traditional APIs?  Ditto for existing
+   users?
 3. Do we want to avoid publishing our prototypes in 3.0 and force plugin
    authors to adopt the new registration API, or should we just strongly
    encourage plugins to update without breaking current plugins?
-4. The documentation strategy needs to be fleshed out further, as we get a
-   better sense of our answers to the other unresolved questions.
+4. The documentation and publicity strategy for this release needs to be
+   fleshed out further, but that's partly dependent on our answers to the
+   other unresolved questions.
 
 # Footnotes
 
@@ -477,4 +483,5 @@ not itself "just" another third-party plugin.
 [#1754]: https://github.com/moment/moment/issues/1754
 [Frozen Moment]: https://github.com/WhoopInc/frozen-moment/
 [maggiepint post]: https://maggiepint.com/2016/06/24/why-moment-js-isnt-immutable-yet/
+[pull request]: https://github.com/moment/moment-rfcs/pull/2
 [ValueObject]: http://martinfowler.com/bliki/ValueObject.html
