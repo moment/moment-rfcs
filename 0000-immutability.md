@@ -264,6 +264,14 @@ So, from a user's perspective:
   instead of the `moment.fn` prototype (or `moment.frozen.duration.fn`
   instead of `moment.duration.fn`, for Durations).
 
+- The `moment()` factory method (and likely all other `moment.*` factories)
+  will be able to accept a Frozen as input to construct a Mutable with the
+  same data as the input Frozen.  Likewise, the `moment.frozen()` factory
+  (and likely all other `moment.frozen.*` factories) will be able to accept
+  a Mutable in order to construct a Frozen with the same data.  The `freeze()`
+  and `thaw()` instance methods from the existing Frozen Moment plugin will
+  **not** be implemented, because they are not needed.
+
 - Instance methods in the Frozen API (from `moment.frozen.fn` and
   `moment.frozen.duration.fn`) are wrapped versions of the corresponding
   methods from the Mutable API.  The wrappers simply create a copy of the
