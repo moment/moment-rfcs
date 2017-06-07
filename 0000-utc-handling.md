@@ -2,6 +2,10 @@
 
 ## Intro
 
+**NOTE**: In the following document, DST refers to time shifts happening in
+different timezones, not necesserily the ones occuring periodically for
+"daylight-saving-time".
+
 Datetime handling is relatively straight forward for UTC, but can get messy
 around DST (Daylight Savings Time), when the local clock shifts forwards or
 backwards one hour. During DST it's possible that a particular local time is
@@ -30,15 +34,15 @@ Of course local correct operations sometimes will hit an invalid or ambiguous
 local date. There are a few available options for each case.
 
 * for invalid dates:
-    * jump forward by one (or more) hours until the time is valid
-    * jump backward by one (or more) hours until the time is valid
-    * jump forward to first valid time (might not be whole hours)
-    * jump backward to first valid time (might not be whole hours)
+    * jump forward by the size of the gap (default)
+    * jump backward by the size of the gap
+    * jump forward to first valid time (might not be size of gap)
+    * jump backward to first valid time (might not be size of gap)
     * declare the date as invalid
 
 * for ambiguous dates:
+    * pick past offset (the one that was present before DST) (default)
     * pick future offset (the one that continues after DST)
-    * pick past offset (the one that was present before DST)
     * pick current offset (in case this operation changes from old to new date,
       the old date's offset could be used, if its one of the two alternatives
       -- so this *option* is only best effort and needs to be backed up by
@@ -53,29 +57,23 @@ operations. All these choices could be configurable.
 
 * Create from local time - given year, month, day, hour, min, sec in local
   time, construct a moment. Note that the given time might be invalid or
-  ambiguous. Invalid - jump forward by whole hours to first valid local time.
-  Ambiguous - pick the offset that continues in the future.
+  ambiguous. Use the default operations for invalid/ambiguous.
 * Add/Subtract
     * add/subtract smaller units (hour or less) - these should be *UTC correct*
     * add/subtract bigger units (day or more) - these should be *local correct*
+      To put it differently, they should behave like a Set operation.
       The idea is that 1st May 12:34 + 15 days should be 16 May 12:34 (if
-      possible), no matter what DST happened from 1st to 15th of May. If the
-      time is invalid, jump forward (by whole hour) to valid; if ambiguous pick
-      future. (For subtract jump backwards and pick past).
+      possible), no matter what DST happened from 1st to 15th of May. Use
+      default operations for invalid/ambiguous (same as set, create).
 * Set one or several units - set is very similar to create (but instead of
-  specifying all units, only the different ones are specified).
-    * set smaller units (minute or less) - these should be *UTC correct*. That
-      is, the set acts as an add/subtract depending on the current value. So if
-      the minute is now 15, a set to 45 means add 30 minutes (check
-      add/subtract above).
-    * set bigger units (hour or more) - these should be *local correct*. So,
-      again it acts as add/subtract depending on current value, and tries to be
-      local correct.
+  specifying all units, only the different ones are specified). Use default
+  operations for invaid/ambiguous moments, resulting from a set.
 * StartOf/EndOf
-    * statof 'day' - in case the start of day is invalid - jump to first valid
-      local time of today (not whole hours), in case its ambiguous - pick the
-      future one
-    * endof 'day' - same idea as start of but in reverse :)
+    * statof UNIT - in case the start of UNIT is invalid - jump to first valid
+      local time of the UNIT (that might not be the gap), in case its ambiguous
+      - pick the past one (that is the default).
+    * endof UNIT - this should just use startof UNIT - 1ms (UTC correct
+      -1ms).
 * change timezone while keeping the local time - same idea applies as creating
   local time from components
 
@@ -111,44 +109,46 @@ universally recognized way of keeping local time, but I'll still use it here
 because its one number, instead of 2 or more). Note that it could be invalid or
 ambiguous.
 
-* `localToOffsets(lts)` -- we'll define a function that returns all offsets of
-  a given local timestamp.
+* `correctLocalDefault(lts)` -- return [new\_lts, offset], new\_lts might
+  differ from lts if lts is invalid.
 
     ```javascript
-    function localToOffsets(lts) {
+    function correctLocalDefault(lts) {
         var res = []
         var of1 = getOffsetFromUTC(lts) // we treat local timestamp as unix to get
                                         // a ballbpark estimate
         var of2 = getOffsetFromUTC(lts - of1) // adjust local by probable offset
         if (of1 == of2) {
-            // (lts, of1) is valid
-            res.push(of1)
-        } else {
-            var of3 = getOffsetFromUTC(lts - of2)
-            if (of3 == of2) {
-                // (lts, of2) is valid
-                res.push(of2)
+            // (lts, of1) is valid, but could be ambigous (second)
+            of3 = getOffsetFromUTC(lts - of1 - 6h); // subtract 6h to see if
+                                                    // we're near DST
+            if (of1 == of3) {
+                return [lts, of1];
+            } else if (getOffsetFromUTC(lts - of3) == of3) {
+                // ambiguous, variants are [lts, of3], [lts, of1], of3 being
+                // the previous
+                return [lts, of3];
             } else {
-                // lts is invalid
+                // there was DST shortly before [lts, of1], but it fully passed
+                return [lts, of1];
             }
-        }
-
-        if (res.length == 0) {
-            // invalid
-            return res;
         } else {
-            var of = res[0];
-            // NOTE: This is heruistic, so might not work in all cases.
-            // check the offsets of lts-of+1h and lts-of-1h
-            var of4 = getOffsetFromUTC(lts-of-1h)
-            var of5 = getOffsetFromUTC(lts-of+1h)
-
-            if (of4 == of+1h) {
-                res.push(of4)
-            } else if (of5 == of-1h) {
-                res.push(of5)
+            // we try a second time, this could happen around invalid time
+            var of3 = getOffsetFromUTC(lts - of2);
+            if (of3 == of2) {
+                return [lts, of2]
+            } else {
+                // invalid time!
+                if (of2 > of3) {
+                    var tmp = of2; of2 = of3; of3 = tmp;
+                }
+                var dstGap = of3 - of2;
+                if (getOffsetFromUTC(lts + dstGap - of3) == of3) {
+                    return [lts + dstGap, of3];
+                } else {
+                    throw new Error("should never happen (test)");
+                }
             }
-            return res;
         }
     }
     ```
